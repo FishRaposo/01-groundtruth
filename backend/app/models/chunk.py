@@ -4,7 +4,8 @@ from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.config import get_settings
@@ -25,8 +26,22 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding = mapped_column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
+    search_vector = mapped_column(TSVECTOR, nullable=True)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        Index("ix_chunks_document_id", "document_id"),
+        Index("ix_chunks_chunk_index", "chunk_index"),
+    )
 
 
 class ChunkResponse(BaseModel):
@@ -38,6 +53,7 @@ class ChunkResponse(BaseModel):
     chunk_index: int = Field(description="Position of this chunk within the document")
     metadata: dict[str, Any] | None = Field(description="Chunk-level metadata")
     created_at: datetime = Field(description="Timestamp when chunk was created")
+    has_embedding: bool = Field(default=False, description="Whether the chunk has a vector embedding")
 
     model_config = {"from_attributes": True}
 

@@ -6,14 +6,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
+from app.api.keys import router as keys_router
 from app.api.queries import router as queries_router
+from app.config import get_settings
+from app.core.logging import setup_logging
 from app.db.session import init_db
-from app.middleware.metrics import MetricsMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
+
+settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
-    """Initialize database tables on startup."""
+    """Initialize database tables and structured logging on startup."""
+    setup_logging(log_format=settings.LOG_FORMAT, log_level=settings.LOG_LEVEL)
     await init_db()
     yield
 
@@ -25,8 +32,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(MetricsMiddleware)
-
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(RateLimitMiddleware, default_rate_limit=60)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -36,6 +43,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api")
+app.include_router(keys_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(queries_router, prefix="/api")
 

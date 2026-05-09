@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, DateTime, Enum, String, Uuid
+from sqlalchemy import JSON, DateTime, Enum, Float, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -42,6 +42,10 @@ class Document(Base):
         Enum(DocumentStatus), default=DocumentStatus.PENDING, nullable=False
     )
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    processing_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

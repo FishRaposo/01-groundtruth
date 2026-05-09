@@ -26,6 +26,10 @@ class Settings(BaseSettings):
 
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"
+
+    AUTH_ENABLED: bool = True
+    RATE_LIMIT_ENABLED: bool = True
 
     CORS_ORIGINS: str = "http://localhost:3000"
     MAX_FILE_SIZE_MB: int = 50
