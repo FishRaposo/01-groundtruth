@@ -8,6 +8,7 @@ from app.api.documents import router as documents_router
 from app.api.health import router as health_router
 from app.api.queries import router as queries_router
 from app.db.session import init_db
+from app.middleware.metrics import MetricsMiddleware
 
 
 @asynccontextmanager
@@ -23,6 +24,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(MetricsMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
