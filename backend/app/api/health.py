@@ -6,11 +6,9 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import Response
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.metrics import get_metrics
 from app.db.session import get_db
 from app.models.chunk import Chunk
 from app.models.document import Document
@@ -100,14 +98,3 @@ async def liveness_check() -> dict[str, str]:
         A minimal dictionary confirming the process is alive.
     """
     return {"status": "alive"}
-
-
-@router.get("/metrics")
-async def metrics_endpoint() -> Response:
-    """Expose Prometheus metrics in text exposition format.
-
-    Returns:
-        A plain-text response containing all collected metrics.
-    """
-    data = get_metrics()
-    return Response(content=data, media_type="text/plain; version=0.0.4; charset=utf-8")

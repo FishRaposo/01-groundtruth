@@ -70,6 +70,10 @@ class DocumentResponse(BaseModel):
     source_url: str | None = Field(description="URL to source file if available")
     status: DocumentStatus = Field(description="Current processing status")
     metadata: dict[str, Any] | None = Field(description="Attached metadata")
+    file_size: int | None = Field(default=None, description="File size in bytes")
+    page_count: int | None = Field(default=None, description="Number of pages")
+    chunk_count: int | None = Field(default=None, description="Number of chunks")
+    processing_time_ms: float | None = Field(default=None, description="Total processing time in milliseconds")
     created_at: datetime = Field(description="Timestamp when document was created")
     updated_at: datetime = Field(description="Timestamp when document was last updated")
 
