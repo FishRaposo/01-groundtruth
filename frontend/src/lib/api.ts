@@ -5,6 +5,7 @@ import type {
   QueryResponse,
   QueryListResponse,
   HealthCheck,
+  StreamEvent,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -101,6 +102,54 @@ class ApiClient {
 
   async healthCheck(): Promise<HealthCheck> {
     return this.request<HealthCheck>("/api/health");
+  }
+
+  async *streamQuestion(request: QueryRequest): AsyncGenerator<StreamEvent> {
+    const url = `${this.baseUrl}/api/queries/stream`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `API error: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No response body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+
+        const jsonStr = trimmed.slice(6);
+        if (!jsonStr) continue;
+
+        const event: StreamEvent = JSON.parse(jsonStr);
+        yield event;
+      }
+    }
+
+    if (buffer.trim().startsWith("data: ")) {
+      const jsonStr = buffer.trim().slice(6);
+      if (jsonStr) {
+        const event: StreamEvent = JSON.parse(jsonStr);
+        yield event;
+      }
+    }
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import DocumentUploader from "@/components/DocumentUploader";
+import { DocumentListSkeleton } from "@/components/LoadingSkeleton";
 import type { Document } from "@/types";
 import { apiClient } from "@/lib/api";
 
@@ -60,7 +61,7 @@ export default function DocumentsPage() {
       )}
 
       {loading ? (
-        <div className="py-8 text-center text-gray-500">Loading documents...</div>
+        <DocumentListSkeleton />
       ) : (
         <div className="mt-8 space-y-3">
           {documents.length === 0 ? (

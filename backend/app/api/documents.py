@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import Any
 
@@ -59,7 +60,16 @@ async def upload_documents(
         )
         db.add(document)
         await db.flush()
-        uploaded.append(DocumentResponse.model_validate(document))
+        doc_response = DocumentResponse.model_validate(document)
+
+        upload_dir = f"data/uploads/{document.id}"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, file.filename)
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        uploaded.append(doc_response)
 
     await db.commit()
 

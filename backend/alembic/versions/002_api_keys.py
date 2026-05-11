@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
         sa.Column("name", sa.String(256), nullable=False),
         sa.Column("key_hash", sa.String(128), nullable=False),
-        sa.Column("prefix", sa.String(8), nullable=False),
+        sa.Column("key_prefix", sa.String(8), nullable=False),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
         sa.Column("last_used_at", sa.DateTime, nullable=True),
@@ -32,11 +32,11 @@ def upgrade() -> None:
         sa.Column("metadata", JSON, nullable=True),
     )
     op.create_index("ix_api_keys_key_hash", "api_keys", ["key_hash"], unique=True)
-    op.create_index("ix_api_keys_prefix", "api_keys", ["prefix"])
+    op.create_index("ix_api_keys_key_prefix", "api_keys", ["key_prefix"])
 
 
 def downgrade() -> None:
     """Drop the api_keys table and its indexes."""
-    op.drop_index("ix_api_keys_prefix", table_name="api_keys")
+    op.drop_index("ix_api_keys_key_prefix", table_name="api_keys")
     op.drop_index("ix_api_keys_key_hash", table_name="api_keys")
     op.drop_table("api_keys")

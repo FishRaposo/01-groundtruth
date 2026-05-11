@@ -18,7 +18,7 @@ class CitationService:
     the corresponding retrieved chunks and produces structured citations.
     """
 
-    def assemble_citations(
+    async def assemble_citations(
         self,
         chunks: list[ChunkWithScore],
         answer: str,
@@ -37,14 +37,6 @@ class CitationService:
         """
         citations: list[SourceCitation] = []
 
-        async def _get_document_title(document_id: uuid.UUID) -> str:
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(Document.title).where(Document.id == document_id)
-                )
-                row = result.scalar_one_or_none()
-                return row if row else "Unknown Document"
-
         citation_pattern = re.compile(r"\[(\d+)\]")
         matches = citation_pattern.findall(answer)
         referenced_indices = set(int(m) for m in matches)
@@ -54,7 +46,7 @@ class CitationService:
             if citation_index not in referenced_indices and referenced_indices:
                 continue
 
-            document_title = "Document"
+            document_title = await self._get_document_title(chunk.document_id)
             preview = chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content
 
             citations.append(
@@ -70,7 +62,7 @@ class CitationService:
 
         return citations
 
-    def format_citation(
+    async def format_citation(
         self,
         chunk: ChunkWithScore,
         index: int,
@@ -84,15 +76,24 @@ class CitationService:
         Returns:
             A formatted SourceCitation object.
         """
+        document_title = await self._get_document_title(chunk.document_id)
         preview = chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content
         return SourceCitation(
             chunk_id=chunk.id,
             document_id=chunk.document_id,
-            document_title="Document",
+            document_title=document_title,
             content_preview=preview,
             relevance_score=chunk.relevance_score,
             citation_index=index,
         )
+
+    async def _get_document_title(self, document_id: uuid.UUID) -> str:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Document.title).where(Document.id == document_id)
+            )
+            row = result.scalar_one_or_none()
+            return row if row else "Unknown Document"
 
     def validate_citations(
         self,

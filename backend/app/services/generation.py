@@ -1,3 +1,6 @@
+import asyncio
+import threading
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.config import get_settings
@@ -68,6 +71,83 @@ class GenerationService:
                 "completion_tokens": 0,
                 "total_tokens": 0,
             }
+
+    async def stream_answer(
+        self,
+        query: str,
+        context: list[str],
+        sources: list[SourceCitation],
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Stream a grounded answer token by token from retrieved context.
+
+        Args:
+            query: The user's question.
+            context: List of retrieved chunk texts to use as evidence.
+            sources: List of source citations for reference.
+
+        Yields:
+            SSE-compatible dicts with type "token", "done", or "error".
+        """
+        prompt = self._build_prompt(query, context)
+
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            loop = asyncio.get_event_loop()
+            queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+            completion_tokens = 0
+
+            def _consume() -> None:
+                nonlocal completion_tokens
+                try:
+                    stream = client.chat.completions.create(
+                        model=settings.LLM_MODEL,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.1,
+                        max_tokens=1024,
+                        stream=True,
+                    )
+                    for chunk in stream:
+                        if chunk.choices:
+                            delta = chunk.choices[0].delta.content
+                            if delta:
+                                completion_tokens += 1
+                                asyncio.run_coroutine_threadsafe(
+                                    queue.put({"type": "token", "content": delta}), loop
+                                )
+
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put({
+                            "type": "done",
+                            "token_usage": {
+                                "prompt_tokens": 0,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": completion_tokens,
+                            },
+                        }),
+                        loop,
+                    )
+                except Exception:
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put({"type": "error", "content": "Streaming failed"}), loop
+                    )
+                finally:
+                    asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+
+            thread = threading.Thread(target=_consume, daemon=True)
+            thread.start()
+
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield event
+        except Exception:
+            yield {"type": "error", "content": "Unable to stream answer"}
 
     def _build_prompt(self, query: str, context: list[str]) -> str:
         """Build the user prompt with numbered context chunks.

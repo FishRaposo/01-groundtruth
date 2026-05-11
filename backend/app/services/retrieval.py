@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,10 @@ class RetrievalService:
     Combines vector similarity search with keyword search using
     Reciprocal Rank Fusion to merge results from both methods.
     """
+
+    def __init__(self) -> None:
+        self._vector_count: int = 0
+        self._keyword_count: int = 0
 
     async def retrieve(
         self,
@@ -63,6 +69,9 @@ class RetrievalService:
         vector_results = await self.similarity_search(query_embedding, top_k * 2)
         keyword_results = await self.keyword_search(query, top_k * 2)
 
+        self._vector_count = len(vector_results)
+        self._keyword_count = len(keyword_results)
+
         rrf_k = 60
         score_map: dict[str, float] = {}
 
@@ -79,7 +88,7 @@ class RetrievalService:
 
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(Chunk).where(Chunk.id.in_([uuid_val for uuid_val in sorted_ids]))
+                select(Chunk).where(Chunk.id.in_([uuid.UUID(cid) for cid in sorted_ids]))
             )
             chunks_by_id = {str(chunk.id): chunk for chunk in result.scalars().all()}
 
@@ -160,6 +169,14 @@ class RetrievalService:
                 {"query": query, "top_k": top_k},
             )
             return [(str(row.id), float(row.score)) for row in result.fetchall()]
+
+    @property
+    def last_vector_count(self) -> int:
+        return self._vector_count
+
+    @property
+    def last_keyword_count(self) -> int:
+        return self._keyword_count
 
 
 retrieval_service = RetrievalService()

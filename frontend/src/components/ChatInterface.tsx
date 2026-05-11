@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import SourceCitation from "./SourceCitation";
 import RetrievalTrace from "./RetrievalTrace";
 import RefusalMessage from "./RefusalMessage";
@@ -15,48 +15,108 @@ interface ChatMessage {
   refusalReason?: string;
   confidence?: number;
   retrievalTrace?: QueryResponse["retrieval_trace"];
+  streaming?: boolean;
 }
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
+  const [streaming, setStreaming] = useState<boolean>(false);
   const [showTrace, setShowTrace] = useState<Record<string, boolean>>({});
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const scrollToBottom = useCallback((): void => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     const question = input.trim();
-    if (!question || loading) return;
+    if (!question || streaming) return;
 
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: question, sources: [], refused: false }]);
-    setLoading(true);
+    setStreaming(true);
+
+    const userMessage: ChatMessage = { role: "user", content: question, sources: [], refused: false };
+    const assistantMessage: ChatMessage = {
+      role: "assistant",
+      content: "",
+      sources: [],
+      refused: false,
+      streaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
     try {
-      const response = await apiClient.askQuestion({ question });
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: response.answer || "",
-          sources: response.sources,
-          refused: response.refused,
-          confidence: response.confidence ?? undefined,
-          retrievalTrace: response.retrieval_trace ?? undefined,
-        },
-      ]);
+      const stream = apiClient.streamQuestion({ question });
+
+      for await (const event of stream) {
+        if (event.type === "token") {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              updated[updated.length - 1] = { ...last, content: last.content + event.content };
+            }
+            return updated;
+          });
+        } else if (event.type === "citations") {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              updated[updated.length - 1] = { ...last, sources: event.sources };
+            }
+            return updated;
+          });
+        } else if (event.type === "refused") {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                refused: true,
+                refusalReason: event.reason,
+                content: event.reason,
+              };
+            }
+            return updated;
+          });
+        } else if (event.type === "done") {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              updated[updated.length - 1] = { ...last, streaming: false };
+            }
+            return updated;
+          });
+        }
+      }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: err instanceof Error ? err.message : "An error occurred",
-          sources: [],
-          refused: true,
-        },
-      ]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last.role === "assistant") {
+          updated[updated.length - 1] = {
+            ...last,
+            content: err instanceof Error ? err.message : "An error occurred",
+            sources: [],
+            refused: true,
+            streaming: false,
+          };
+        }
+        return updated;
+      });
     } finally {
-      setLoading(false);
+      setStreaming(false);
     }
   };
 
@@ -82,7 +142,12 @@ export default function ChatInterface() {
               msg.role === "user" ? "bg-brand-50 ml-12" : "bg-white border border-gray-200 mr-12"
             }`}
           >
-            <p className="whitespace-pre-wrap text-sm text-gray-800">{msg.content}</p>
+            <p className="whitespace-pre-wrap text-sm text-gray-800">
+              {msg.content}
+              {msg.streaming && (
+                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-brand-600 align-text-bottom" />
+              )}
+            </p>
 
             {msg.refused && msg.role === "assistant" && (
               <RefusalMessage
@@ -116,9 +181,7 @@ export default function ChatInterface() {
             )}
           </div>
         ))}
-        {loading && (
-          <div className="py-4 text-center text-sm text-gray-500">Thinking...</div>
-        )}
+        <div ref={messagesEndRef} />
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-3">
@@ -128,11 +191,11 @@ export default function ChatInterface() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a question about your documents..."
           className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-          disabled={loading}
+          disabled={streaming}
         />
         <button
           type="submit"
-          disabled={loading || !input.trim()}
+          disabled={streaming || !input.trim()}
           className="btn-primary disabled:opacity-50"
         >
           Send

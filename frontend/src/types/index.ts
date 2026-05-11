@@ -93,3 +93,9 @@ export interface ApiError {
   detail: string;
   status_code?: number;
 }
+
+export type StreamEvent =
+  | { type: "token"; content: string }
+  | { type: "citations"; sources: SourceCitation[] }
+  | { type: "refused"; reason: string }
+  | { type: "done"; token_usage: Record<string, number> };

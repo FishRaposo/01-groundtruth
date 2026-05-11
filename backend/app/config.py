@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_FILE_TYPES: str = ".pdf,.md,.html,.docx,.txt"
-    LOG_FORMAT: str = "text"
+
     EMBEDDING_BATCH_SIZE: int = 100
     EMBEDDING_CACHE_ENABLED: bool = True
 
