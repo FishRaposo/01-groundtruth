@@ -41,3 +41,20 @@ def test_chunk_by_structure_splits_on_headings(service: ChunkingService) -> None
     text = "# Section 1\nContent 1\n\n# Section 2\nContent 2\n\n# Section 3\nContent 3"
     chunks = service.chunk_by_structure(text, structure="heading")
     assert len(chunks) >= 2
+
+
+def test_chunk_by_semantic_splits_topic_shifts(service: ChunkingService, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that semantic chunking starts a new chunk when the topic changes."""
+    monkeypatch.setattr("app.services.chunking.settings.CHUNK_SIZE", 120)
+    text = (
+        "Refund policy allows returns within thirty days. "
+        "Refund requests require an order number. "
+        "Security controls require multi factor authentication. "
+        "Security logs are retained for ninety days."
+    )
+
+    chunks = service.chunk_by_semantic(text)
+
+    assert len(chunks) >= 2
+    assert "Refund policy" in chunks[0]
+    assert any("Security controls" in chunk for chunk in chunks[1:])

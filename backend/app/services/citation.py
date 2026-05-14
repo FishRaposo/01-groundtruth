@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
-from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.chunk import ChunkWithScore
 from app.models.query import SourceCitation

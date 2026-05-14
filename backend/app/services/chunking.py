@@ -10,7 +10,7 @@ class ChunkingService:
     """Splits document text into retrievable chunks using configurable strategies.
 
     Supports fixed-size chunking with overlap, structural chunking by headings,
-    and a placeholder for semantic chunking.
+    and sentence-aware semantic chunking.
     """
 
     def chunk_text(
@@ -62,9 +62,9 @@ class ChunkingService:
     def chunk_by_semantic(self, text: str) -> list[str]:
         """Split text using semantic similarity boundaries.
 
-        This is a placeholder implementation that falls back to
-        fixed-size chunking. A production implementation would use
-        sentence embeddings to detect topic boundaries.
+        This lightweight implementation keeps nearby sentences together
+        while starting a new chunk at paragraph breaks, topic-heading style
+        transitions, or when the configured chunk size is reached.
 
         Args:
             text: The full document text to chunk.
@@ -72,7 +72,56 @@ class ChunkingService:
         Returns:
             A list of semantically coherent text chunks.
         """
-        return self.chunk_text(text)
+        sentences = [
+            s.strip()
+            for s in re.split(r"(?<=[.!?])\s+|\n{2,}", text.strip())
+            if s.strip()
+        ]
+        if not sentences:
+            return []
+
+        chunks: list[str] = []
+        current: list[str] = []
+        current_terms: set[str] = set()
+
+        for sentence in sentences:
+            terms = self._semantic_terms(sentence)
+            current_text = " ".join(current)
+            next_size = len(current_text) + len(sentence) + (1 if current else 0)
+            overlap = len(current_terms & terms) / max(len(terms), 1)
+            topic_shift = bool(current) and overlap < 0.12 and len(current_text) >= settings.CHUNK_SIZE * 0.35
+
+            if current and (next_size > settings.CHUNK_SIZE or topic_shift):
+                chunks.append(current_text)
+                current = []
+                current_terms = set()
+
+            current.append(sentence)
+            current_terms.update(terms)
+
+        if current:
+            chunks.append(" ".join(current))
+
+        final_chunks: list[str] = []
+        for chunk in chunks:
+            if len(chunk) > settings.CHUNK_SIZE:
+                final_chunks.extend(self.chunk_text(chunk))
+            else:
+                final_chunks.append(chunk)
+        return final_chunks
+
+    @staticmethod
+    def _semantic_terms(text: str) -> set[str]:
+        """Extract coarse content terms for sentence grouping."""
+        stopwords = {
+            "the", "and", "for", "with", "that", "this", "from", "are", "was",
+            "were", "into", "about", "your", "you", "our", "has", "have",
+        }
+        return {
+            word
+            for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower())
+            if word not in stopwords
+        }
 
     def chunk_by_structure(self, text: str, structure: str = "heading") -> list[str]:
         """Split text using structural markers such as headings.
